@@ -91,73 +91,142 @@ drv <- dbDriver("PostgreSQL")
  ggplot(data = fun, aes(x = x, y = y, colour = z)) + geom_point(size = 1)
 
  
- init()
- head(AAPLyear)
- getSymbols("IBM", adjust=TRUE)
- getSymbols("AAPL", adjust=TRUE)
+
+ #################COMMON PARAMETERS############
+ setParameters <- function(){
+   parameter.stockColNames <<-  c('date','name', 'Open', 'High', 'Low', 'Close', 'Volume', 'Adjusted')
+   parameter.stocknames <<- c('AAPL','IBM')
+   parameter.spL   <<- 0.02
+   parameter.tpL   <<- 0.04
+ }
  
- stock<- NULL
- stocks <-  data.frame(date=index(AAPLyear), cbind( rep('AAPL',nrow(AAPLyear)),coredata(AAPLyear)))
  
 ###############WILLIAMS###############
+ williamsTest <- function(){
+ parameter.stocknameExt <- c('WPRbool', 'WPRsign', 'SLval','OutSLbool','TPval','OutTPbool','Broker','Ret')
+ williams.par <- 14
+ williams.var <- paste('WPR',williams.par, sep="")
+ williams.limit <- 0.9
+ 
+ 
  ###INIT#####
+ williams.resultnames <- c('stockname','WPAr', 'slL', 'tpL', 'result')
+  results <- as.data.frame(setNames(replicate(8,numeric(0), simplify = F), williams.resultnames))
+  allstocks <<- as.data.frame(setNames(replicate(8,numeric(0), simplify = F), parameter.stockColNames))
  
- WilliamsParameter <- 14
- stockColNamesExt <- c('WPRbool', 'WPRsign', 'SLval','OutSLbool','TPval','OutTPbool','Broker','Ret')
-
- stocknames <- c('AAPL','IBM')
- stockColNames <-  c('date','name', 'Open', 'High', 'Low', 'Close', 'Volume', 'Adjusted')
- allstocks<- nodata <- as.data.frame(setNames(replicate(8,numeric(0), simplify = F), stockColNames))
- 
- for (varname in stocknames){
+ for (varname in parameter.stocknames){
    getSymbols(varname, adjust=TRUE)
    x <-  data.frame(date=index(get(varname)), cbind( 
      rep(varname,nrow(get(varname))),
      coredata(get(varname)),
      ifelse(
-            is.na(WPR(Cl(get(varname)), WilliamsParameter)),
+            is.na(WPR(Cl(get(varname)), williams.par)),
             0,
-            WPR(Cl(get(varname)), WilliamsParameter))
+            WPR(Cl(get(varname)), williams.par))
      )
      )
-   colnames(x) <- c('date','name', 'Open', 'High', 'Low', 'Close', 'Volume', 'Adjusted', paste('WPR',WilliamsParameter, sep=""))
+   colnames(x) <- c(parameter.stockColNames,williams.var)
    allstocks <- rbind(allstocks, x)
  }
  
- for (varname in stockColNamesExt){
+ for (varname in parameter.stocknameExt){
    allstocks[[varname]] <- 0
  }
  
  ####logic##########
+ as.numeric(as.character(allstocks[[williams.var]][30])) -
+   as.numeric(as.character(allstocks[[williams.var]][30]))
  
- stoploss   <- 0.2
- takeProfit <- 0.4
+ allstocks$WPRbool <- ifelse(
+   as.numeric(as.character(allstocks[[williams.var]])) > williams.limit,      #above limit condition
+   1,                                               
+   0)
  
- AAPLyear$AAPL.WPRbool <- ifelse(AAPLyear$AAPL.WPR14 > 0.9, 1, 0)
- AAPLyear$AAPL.WPRsign <- ifelse(is.na(lag(AAPLyear$AAPL.WPRbool)),0, ifelse((AAPLyear$AAPL.WPRbool-  lag(AAPLyear$AAPL.WPRbool)>0),1,0) )      
- for (i in 2 : nrow(AAPLyear)) {
-   AAPLyear$AAPL.SLval[i] <-  ifelse( is.na( AAPLyear$AAPL.SLval[i-1] )  ,0, ifelse(AAPLyear$AAPL.WPRsign[i]>0,AAPLyear$AAPL.Open[i] * (1-stoploss),  AAPLyear$AAPL.SLval[i-1]   ))
+ for (i in 2 : nrow(allstocks)) {
+     allstocks$WPRsign[i] <- 
+       ifelse(
+         (allstocks$WPRbool[i] - allstocks$WPRbool[i-1]>0 &           #WPRbool 0 -> 1 change condition
+            allstocks$name[i] == allstocks$name[i-1]),  
+         as.numeric(as.character(allstocks[[williams.var]][i])) -     #measure sign strenghs
+           as.numeric(as.character(allstocks[[williams.var]][i-1])),
+         0)
  }
- AAPLyear$AAPL.OutSLbool <- ifelse(AAPLyear$AAPL.SLval > AAPLyear$AAPL.Close, 1, 0)
+
  
- for (i in 2 : nrow(AAPLyear)) {
-   AAPLyear$AAPL.TPval[i] <-  ifelse( is.na( AAPLyear$AAPL.TPval[i-1] )  ,0, ifelse(AAPLyear$AAPL.WPRsign[i]>0,AAPLyear$AAPL.Open[i] * (1+takeProfit),  AAPLyear$AAPL.TPval[i-1]   ))
+  for (i in 2 : nrow(allstocks)) {
+   allstocks$SLval[i] <-  
+     ifelse( allstocks$name[i]== allstocks$name[i-1],
+        ifelse(
+          allstocks$WPRsign[i-1]>0,                    # calculate stoploss value at step in
+          as.numeric(as.character(allstocks$Open[i])) * (1-parameter.spL),
+          allstocks$SLval[i-1] ),
+     0)
+  }
+
+ for (i in 2 : nrow(allstocks)) {
+   allstocks$OutSLbool[i] <- 
+     ifelse(                                         #Step out condition based on SL
+       as.numeric(as.character(allstocks$SLval[i])) > 
+        as.numeric(as.character(allstocks$Close[i])),
+        1,
+        0)
  }
- AAPLyear$AAPL.OutTPbool <- ifelse(AAPLyear$AAPL.TPval < AAPLyear$AAPL.Close, 1, 0)
- 
- for (i in 2 : nrow(AAPLyear)-1) {
-   ifelse(AAPLyear$AAPL.Broker[i]==0,   
-          ifelse( AAPLyear$AAPL.WPRsign[i] >0,AAPLyear$AAPL.Broker[i+1]<- 1 , AAPLyear$AAPL.Broker[i+1]<- 0 ),
-          ifelse( AAPLyear$AAPL.OutTPbool[i] >0  |  AAPLyear$AAPL.OutSLbool[i] >0,AAPLyear$AAPL.Broker[i+1]<- 0 , AAPLyear$AAPL.Broker[i+1]<- 1)
-   )
+ allstocks$TPval <- 0
+ allstocks$TPval[1] <- 10000
+ for (i in 2 : nrow(allstocks)) {                #calculate Takeprofit at step in
+   allstocks$TPval[i] <-  
+     ifelse( allstocks$name[i]== allstocks$name[i-1],
+        ifelse(
+          allstocks$WPRsign[i-1]>0,
+          as.numeric(as.character(allstocks$Open[i])) * (1+parameter.tpL),
+          allstocks$TPval[i-1]   ),
+     0)
  }
- AAPLyear$AAPL.Ret<- ifelse( AAPLyear$AAPL.Broker>0 ,  AAPLyear$AAPL.Close -AAPLyear$AAPL.Open,0)
+ for (i in 2 : nrow(allstocks)) {
+   allstocks$OutTPbool[i] <- 
+     ifelse(                                         #Step out condition based on TP
+       as.numeric(as.character(allstocks$TPval[i-1])) <  
+         as.numeric(as.character(allstocks$Close[i-1])),
+       1,
+       0)
+ }
+ allstocks$Broker[i]<- 0
+ for (i in 2 : nrow(allstocks)) {
+   ifelse( allstocks$name[i]== allstocks$name[i-1],
+           
+      ifelse(allstocks$Broker[i-1]==0,   
+            ifelse( allstocks$WPRsign[i] >0,
+                    allstocks$Broker[i]<- 1 , 
+                    allstocks$Broker[i]<- 0 ),
+            ifelse( allstocks$OutTPbool[i] >0  |  allstocks$OutSLbool[i] >0,
+                    allstocks$Broker[i]<- 0 , 
+                    allstocks$Broker[i]<- 1)),
+      
+   allstocks$Broker[i]<- 0)
+ }
  
+ allstocks$Ret<- ifelse( allstocks$Broker>0 ,
+                              as.numeric(as.character(allstocks$Close)) - 
+                                as.numeric(as.character(allstocks$Open)),
+                              0)
  
- sum(AAPLyear$AAPL.Ret)
+ result <- c('ALL', williams.par,parameter.spL,parameter.tpL, sum(allstocks$Ret))
+
+ results <<- rbind(results, result)
+ colnames(results) <- williams.resultnames
  
+ }
  
  
 #################################################
  
-head (allstocks)
+setParameters()
+williamsTest()
+
+rm(results)
+ 
+ 
+ 
+ 
+ 
+ 
