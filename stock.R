@@ -9,45 +9,7 @@ drv <- dbDriver("PostgreSQL")
 #con <- dbConnect(drv)# Simple version (localhost as default)
 # Full version of connection seetting
  con <- dbConnect(drv, dbname="stock",host="localhost",port=5432,user="postgres",password="")
- dbWriteTable(con, "AAPL", data.frame(date=index(AAPL) ,AAPL), row.names=FALSE)
- 
- rm(AAPL)
- dbReadTable(con, "AAPL")
- 
- 
- 
- 
- AAPL[,-1]
- dbExistsTable(con,"IBM")
- 
- 
- 
- 
- getSymbols("AAPL", adjust=TRUE)
- data.frame(date=index(AAPL), AAPL)
- 
- setNames(AAPL, C("Open","High","Low","Close","Volume","Adjusted"))
- head(AAPL)
- data.frame(AAPL, 
-            row.names=c("Open","High","Low","Close","Volume","Adjusted"))
- 
- names(AAPL)<-c("Open","High","Low","Close","Volume","Adjusted")
- 
 
- rm(AAPLyear)
- getSymbols("AAPL", adjust=TRUE)
- AAPLyear <- AAPL["2015"]
-
- 
- rm(AAPLdf)
- 
-
-initStocks(c("CBK","IBM"))
-
-initStocks("CBK", "IBM")
-rm(AAPL)
-test2 <-"test3"
-assign(test2, 5)
 
  
  plot(AAPLyear)
@@ -66,20 +28,11 @@ assign(test2, 5)
    }  
    
  }
- 
- 
 
-
- head(AAPLyear)
- AAPLyear
- 
  install.packages("ggplot2")
  library('ggplot2')
  
- xx <- 
- yy
- zz
- 
+
  fun <- data.frame(
    x = rep(c(1:100), 100),
    y = sort(  rep(c(1:100), 100) ),
