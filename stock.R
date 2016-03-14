@@ -3,7 +3,7 @@ install.packages("RPostgreSQL")
 
 library(RPostgreSQL)
 library(sqldf)
-
+library(quantmod)
 # Establish connection to PoststgreSQL using RPostgreSQL
 drv <- dbDriver("PostgreSQL")
 #con <- dbConnect(drv)# Simple version (localhost as default)
@@ -13,45 +13,13 @@ drv <- dbDriver("PostgreSQL")
  
  
  
- library(quantmod)
+
  rm(AAPLyear, AAPL)
  getSymbols("AAPL", adjust=TRUE)
  AAPLyear <- AAPL["2015"]
 
 
- AAPLyear$AAPL.WPR14 <- 0
- AAPLyear$AAPL.WPRbool <- 0
- AAPLyear$AAPL.WPRsign <- 0
- AAPLyear$AAPL.SLval <- 0
- AAPLyear$AAPL.OutSLbool <- 0
- AAPLyear$AAPL.TPval <- 0
- AAPLyear$AAPL.OutTPbool <- 0
- AAPLyear$AAPL.Broker<- 0
- AAPLyear$AAPL.Ret<- 0
- 
- AAPLyear$AAPL.WPR14 <- ifelse(is.na(WPR(Cl(AAPLyear), 14)),0,WPR(Cl(AAPLyear), 14))
- AAPLyear$AAPL.WPRbool <- ifelse(AAPLyear$AAPL.WPR14 > 0.9, 1, 0)
- AAPLyear$AAPL.WPRsign <- ifelse(is.na(lag(AAPLyear$AAPL.WPRbool)),0, ifelse((AAPLyear$AAPL.WPRbool-  lag(AAPLyear$AAPL.WPRbool)>0),1,0) )      
- for (i in 2 : nrow(AAPLyear)) {
-   AAPLyear$AAPL.SLval[i] <-  ifelse( is.na( AAPLyear$AAPL.SLval[i-1] )  ,0, ifelse(AAPLyear$AAPL.WPRsign[i]>0,AAPLyear$AAPL.Open[i] * 0.98,  AAPLyear$AAPL.SLval[i-1]   ))
- }
- AAPLyear$AAPL.OutSLbool <- ifelse(AAPLyear$AAPL.SLval > AAPLyear$AAPL.Close, 1, 0)
- 
- for (i in 2 : nrow(AAPLyear)) {
-   AAPLyear$AAPL.TPval[i] <-  ifelse( is.na( AAPLyear$AAPL.TPval[i-1] )  ,0, ifelse(AAPLyear$AAPL.WPRsign[i]>0,AAPLyear$AAPL.Open[i] * 1.06,  AAPLyear$AAPL.TPval[i-1]   ))
- }
- AAPLyear$AAPL.OutTPbool <- ifelse(AAPLyear$AAPL.TPval < AAPLyear$AAPL.Close, 1, 0)
- 
- for (i in 2 : nrow(AAPLyear)-1) {
-    ifelse(AAPLyear$AAPL.Broker[i]==0,   
-          ifelse( AAPLyear$AAPL.WPRsign[i] >0,AAPLyear$AAPL.Broker[i+1]<- 1 , AAPLyear$AAPL.Broker[i+1]<- 0 ),
-          ifelse( AAPLyear$AAPL.OutTPbool[i] >0  |  AAPLyear$AAPL.OutSLbool[i] >0,AAPLyear$AAPL.Broker[i+1]<- 0 , AAPLyear$AAPL.Broker[i+1]<- 1)
-           )
- }
- AAPLyear$AAPL.Ret<- ifelse( AAPLyear$AAPL.Broker>0 ,  AAPLyear$AAPL.Close -AAPLyear$AAPL.Open,0)
- 
- 
- sum(AAPLyear$AAPL.Ret)
+
  
  plot(AAPLyear)
  for (i in 2 : nrow(AAPLyear)-1) {
