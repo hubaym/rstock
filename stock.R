@@ -8,17 +8,46 @@ library(quantmod)
 drv <- dbDriver("PostgreSQL")
 #con <- dbConnect(drv)# Simple version (localhost as default)
 # Full version of connection seetting
- con <- dbConnect(drv, dbname="stock",host="localhost",port=5432,user="postgres",password="postgres")
- dbWriteTable(con, "AAPL", AAPL, row.names=FALSE)
+ con <- dbConnect(drv, dbname="stock",host="localhost",port=5432,user="postgres",password="")
+ dbWriteTable(con, "AAPL", data.frame(date=index(AAPL) ,AAPL), row.names=FALSE)
+ 
+ rm(AAPL)
+ dbReadTable(con, "AAPL")
  
  
+ 
+ 
+ AAPL[,-1]
+ dbExistsTable(con,"IBM")
+ 
+ 
+ 
+ 
+ getSymbols("AAPL", adjust=TRUE)
+ data.frame(date=index(AAPL), AAPL)
+ 
+ setNames(AAPL, C("Open","High","Low","Close","Volume","Adjusted"))
+ head(AAPL)
+ data.frame(AAPL, 
+            row.names=c("Open","High","Low","Close","Volume","Adjusted"))
+ 
+ names(AAPL)<-c("Open","High","Low","Close","Volume","Adjusted")
  
 
- rm(AAPLyear, AAPL)
+ rm(AAPLyear)
  getSymbols("AAPL", adjust=TRUE)
  AAPLyear <- AAPL["2015"]
 
+ 
+ rm(AAPLdf)
+ 
 
+initStocks(c("CBK","IBM"))
+
+initStocks("CBK", "IBM")
+rm(AAPL)
+test2 <-"test3"
+assign(test2, 5)
 
  
  plot(AAPLyear)
@@ -58,16 +87,24 @@ drv <- dbDriver("PostgreSQL")
  )
  ggplot(data = fun, aes(x = x, y = y, colour = z)) + geom_point(size = 1)
 
- 
-
- #################COMMON PARAMETERS############
- setParameters <- function(){
-   parameter.stockColNames <<-  c('date','name', 'Open', 'High', 'Low', 'Close', 'Volume', 'Adjusted')
-   parameter.stocknames <<- c('AAPL','IBM')
-   parameter.spL   <<- 0.02
-   parameter.tpL   <<- 0.04
+##############INITSTOCKs function##################
+ initStocks<- function(stockNameList){
+   
+   for (stock in stockNameList){
+     
+     if ( !dbExistsTable(con,stock)){
+       print(stock)
+       getSymbols(stock, adjust=TRUE)
+       dbWriteTable(con, stock, data.frame(date=index(get(stock)) ,as.data.frame(get(stock), 
+                c("Open","High","Low","Close","Volume","Adjusted")), row.names=TRUE))
+       
+     }
+     x <- dbReadTable(con, stock)
+     assign(stock, xts(x[,-1], order.by=x[,1])["2015"], envir = .GlobalEnv)
+     rm(x)
+   }
+   
  }
- 
  
 ###############WILLIAMS###############
  williamsTest <- function(){
@@ -79,11 +116,17 @@ drv <- dbDriver("PostgreSQL")
  
  ###INIT#####
  williams.resultnames <- c('stockname','WPAr', 'slL', 'tpL', 'result')
-  results <- as.data.frame(setNames(replicate(8,numeric(0), simplify = F), williams.resultnames))
-  allstocks <<- as.data.frame(setNames(replicate(8,numeric(0), simplify = F), parameter.stockColNames))
- 
+  results <<- as.data.frame(setNames(replicate(5,numeric(0), simplify = F), williams.resultnames))
+  
+  
+  
+  for (spLLocal in parameter.spL){ 
+    print("startloop")
+    print(spLLocal)
+    
+    allstocks <<- as.data.frame(setNames(replicate(8,numeric(0), simplify = F), parameter.stockColNames))
+    
  for (varname in parameter.stocknames){
-   getSymbols(varname, adjust=TRUE)
    x <-  data.frame(date=index(get(varname)), cbind( 
      rep(varname,nrow(get(varname))),
      coredata(get(varname)),
@@ -96,14 +139,13 @@ drv <- dbDriver("PostgreSQL")
    colnames(x) <- c(parameter.stockColNames,williams.var)
    allstocks <- rbind(allstocks, x)
  }
+    print("ready with stocknames")
  
  for (varname in parameter.stocknameExt){
    allstocks[[varname]] <- 0
  }
  
  ####logic##########
- as.numeric(as.character(allstocks[[williams.var]][30])) -
-   as.numeric(as.character(allstocks[[williams.var]][30]))
  
  allstocks$WPRbool <- ifelse(
    as.numeric(as.character(allstocks[[williams.var]])) > williams.limit,      #above limit condition
@@ -126,7 +168,7 @@ drv <- dbDriver("PostgreSQL")
      ifelse( allstocks$name[i]== allstocks$name[i-1],
         ifelse(
           allstocks$WPRsign[i-1]>0,                    # calculate stoploss value at step in
-          as.numeric(as.character(allstocks$Open[i])) * (1-parameter.spL),
+          as.numeric(as.character(allstocks$Open[i])) * (1-spLLocal),
           allstocks$SLval[i-1] ),
      0)
   }
@@ -158,6 +200,7 @@ drv <- dbDriver("PostgreSQL")
        1,
        0)
  }
+ print("before broker")
  allstocks$Broker[i]<- 0
  for (i in 2 : nrow(allstocks)) {
    ifelse( allstocks$name[i]== allstocks$name[i-1],
@@ -178,9 +221,14 @@ drv <- dbDriver("PostgreSQL")
                                 as.numeric(as.character(allstocks$Open)),
                               0)
  
- result <- c('ALL', williams.par,parameter.spL,parameter.tpL, sum(allstocks$Ret))
-
+ print (sum(allstocks$Ret))
+ result <- data.frame('ALL', williams.par,spLLocal,parameter.tpL, sum(allstocks$Ret))
+ 
  results <<- rbind(results, result)
+ rm(result)
+ rm(allstocks)
+ 
+  }
  colnames(results) <- williams.resultnames
  
  }
@@ -188,13 +236,41 @@ drv <- dbDriver("PostgreSQL")
  
 #################################################
  
-setParameters()
+ #################COMMON PARAMETERS############
+
+   parameter.stockColNames <<-  c('date','name', 'Open', 'High', 'Low', 'Close', 'Volume', 'Adjusted')
+   parameter.stocknames <<- c('AAPL','IBM')
+   parameter.spL   <<- seq(0.016, 0.018, 0.001)
+   parameter.tpL   <<- 0.04
+ 
+   
+   
+   
+   initStocks(parameter.stocknames)
+   rm(allstocks)
 williamsTest()
 
 rm(results)
+rm(IBM)
+rm(AAPL)
+rm(allstocks)
+rm(williams.resultnames)
+warnings()
+ 
+data.frame('ALL','3','eer',45)
  
  
- 
- 
- 
- 
+getSymbols("IBM", adjust=TRUE)
+get("IBM")<-setNames(get("IBM"), c("Open","High","Low","Close","Volume","Adjusted"))
+dbWriteTable(con, "IBM", data.frame(date=index(get("IBM")) ,get("IBM")), row.names=FALSE)
+
+names(IBM) <-c("Open","High","Low","Close","Volume","Adjusted")
+IBM[1,]
+
+head(as.data.frame(IBM, c("Open","High","Low","Close","Volume","Adjusted")))
+setNames(get(stock), c("Open","High","Low","Close","Volume","Adjusted"))
+dbWriteTable(con, stock, data.frame(date=index(get(stock)) ,get(stock)), row.names=FALSE)
+
+
+dbWriteTable(con, "IBM", data.frame(date=index(get("IBM")) ,as.data.frame(get("IBM"), 
+                                                                          c("Open","High","Low","Close","Volume","Adjusted")), row.names=TRUE))
